@@ -12,10 +12,15 @@ import { S_LOCAL_GUEST, S_ROAM, S_TENANT } from './operators';
 import { S_ADMIN } from './admin';
 import { S_MIGRATE, S_SVC_SHARED, S_SYNC } from './sync';
 import { S_STACK_CONNECT, S_STACK_LOCAL } from './stack';
+import { S_BOOT } from './boot';
+import { S_APP_REGISTER } from './register';
+import { S_ZONES } from './zones';
 
 export const SCENARIOS: Scenario[] = [
   // stage 1 — substrate (allow-all, seams visible)
   DISCOVERY,
+  S_BOOT,
+  S_APP_REGISTER,
   S_FANOUT,
   S_FANOUT_X,
   S_DIFF,
@@ -32,6 +37,7 @@ export const SCENARIOS: Scenario[] = [
   S_AGENT,
   S_VERBS,
   S_IDP,
+  S_ZONES,
   S_ROAM,
   S_TENANT,
   S_LOCAL_GUEST,

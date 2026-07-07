@@ -113,6 +113,20 @@ const STATES: CatalogState[] = [
   { id: 'L5', title: 'hydrate from store', frame: 'HYDRATE', kind: 'internal', desc: 'Boot: glial loads the cached fold + tail from the local destination — the browser is a first-class replica.' },
   { id: 'L6', title: 'rich change event', frame: 'EVENT', kind: 'message', desc: 'Glial emits a shape-aware envelope {refresh|delta, baseSeq} — the consumer chooses incremental vs whole-field against live UI state.' },
   { id: 'L7', title: 'incremental apply', frame: 'EVENT', kind: 'internal', desc: 'The consumer applies the delta; cursors survive via stable position identity (the text-crdt gift).' },
+
+  // ---- N: node boot / system-data seam (GDL-036) -------------------------
+  { id: 'N1', title: 'acquire instance', frame: 'FOLD', kind: 'internal', desc: 'StoreApi opens $HOME/.glade/sys/<name>/ and takes instance.lock (single-writer, the workspace.lock precedent); cache/ is class-4, rebuildable, never load-bearing.' },
+  { id: 'N2', title: 'node.key → NodeId', frame: 'ROUTE', kind: 'internal', gateKind: 'security', desc: 'Class-1 secret: ssh-discipline permission check (refuse group/world-readable), derive the NodeId, and it MUST match our own NodeRecord in class 2 — key replacement is identity loss, not forgery.' },
+  { id: 'N3', title: 'load SystemSnapshot blob', frame: 'HYDRATE', kind: 'internal', desc: 'StoreApi loads records.json as ONE taut SystemSnapshot{records, heads} — a snapshot is a cached fold + heads (degenerate sync). The whole-state blob is the interim impl the seam hides.' },
+  { id: 'N4', title: 'class-3 fail-closed load', frame: 'FOLD', kind: 'internal', gateKind: 'security', desc: 'local.json (node-private assertions) is node-self-signed and checked on load; a failed item discards to its declared MOST-restrictive default (AZ-11), never to "off".' },
+  { id: 'N5', title: 'RegistryApi ready', frame: 'FOLD', kind: 'internal', desc: 'The materialised fold answers whoServes/replicasOf/grantsFor/nodesOf — reads are queries-over-fold, never getConfig(); a fold-backed impl slots in with no caller changing (the seam test IS the atlas).' },
+
+  // ---- P: app registration / declaration surface (GDL-037/038) -----------
+  { id: 'P1', title: 'read <app>.glade', frame: 'FOLD', kind: 'internal', desc: 'A node reads an app’s <app>.glade (e.g. grazel-app.glade) as runtime DATA — loaded, not compiled: BindingDecls + ServiceDefinitions + ACL seeds parsed. Never a compiler front-end.' },
+  { id: 'P2', title: 'register declarations', frame: 'APPEND', kind: 'internal', desc: 'glade ids + shapes + key-type refs registered as ordinary runtime records under the registrant’s chain — the same records dynamic configuration writes; re-registration diffs against records (GQ-6 pinning).' },
+
+  // ---- Z: zones — domain / zone / surface (GDL-039) ----------------------
+  { id: 'Z1', title: 'private-zone keyed routing', frame: 'ROUTE', kind: 'internal', desc: 'A private zone is keyed to a self (self:<user>); the subscription table matches (share, glade id, key), so a foreign self never matches — privacy needs NO grant. Contrast S4: commons is the only access-controlled join.' },
 ];
 
 export const CATALOG: Record<string, CatalogState> = Object.fromEntries(
