@@ -1,0 +1,109 @@
+// INV-4 unit coverage: a stage-2 trace that serves without a grant must fail;
+// the same trace with the grant in the sender's fold must pass.
+import { describe, expect, it } from 'vitest';
+import { checkInvariants } from './invariants';
+import type { Scenario } from './types';
+
+const actor = (id: string, role: 'client' | 'node') => ({
+  id,
+  label: id,
+  sub: '',
+  role,
+  x: 0,
+  y: 0,
+  w: 10,
+  h: 10,
+  internals: [],
+  blurb: '',
+});
+
+const base: Scenario = {
+  id: 'leaky',
+  stage: 2,
+  title: 'leaky',
+  summary: '',
+  actors: [actor('ui', 'client'), actor('node', 'node')],
+  phases: [{ id: 'p', label: 'P', summary: '' }],
+  initial: { node: { 'sub ws-x/tree': 'ui' } },
+  steps: [
+    {
+      state: 'A5',
+      phase: 'p',
+      kind: 'message',
+      from: 'node',
+      to: 'ui',
+      frame: 'OPS',
+      label: 'serve',
+      payload: { share: 'ws-x', gladeId: 'tree' },
+      note: 'serve without grant',
+    },
+  ],
+};
+
+describe('INV-4 grant-aware serving', () => {
+  it('flags a stage-2 serve with no grant in the sender fold', () => {
+    const errs = checkInvariants(base);
+    expect(errs.some((e) => e.includes('INV-4'))).toBe(true);
+  });
+
+  it('passes when the sender fold carries the grant', () => {
+    const ok: Scenario = {
+      ...base,
+      initial: { node: { 'sub ws-x/tree': 'ui', 'grant ui ws-x': 'read.subscribe' } },
+    };
+    expect(checkInvariants(ok)).toEqual([]);
+  });
+
+  it('exempts stage-1 traces (allow-all by design)', () => {
+    const stage1: Scenario = { ...base, stage: 1 };
+    expect(checkInvariants(stage1).some((e) => e.includes('INV-4'))).toBe(false);
+  });
+
+  it('INV-5: flags a replica held without a matching operator hold-grant', () => {
+    const bad: Scenario = {
+      ...base,
+      initial: {
+        node: { operator: 'saas-corp', 'replica ws-x': 'live', 'sub ws-x/tree': 'ui', 'grant ui ws-x': 'read' },
+      },
+    };
+    expect(checkInvariants(bad).some((e) => e.includes('INV-5'))).toBe(true);
+    const ok: Scenario = {
+      ...base,
+      initial: {
+        node: {
+          operator: 'saas-corp',
+          'replica ws-x': 'live',
+          'hold ws-x': 'granted: gianni, saas-corp',
+          'sub ws-x/tree': 'ui',
+          'grant ui ws-x': 'read',
+        },
+      },
+    };
+    expect(checkInvariants(ok)).toEqual([]);
+  });
+
+  it('INV-5: nodes without an operator key are exempt (legacy traces)', () => {
+    const legacy: Scenario = {
+      ...base,
+      initial: { node: { 'replica ws-x': 'live', 'sub ws-x/tree': 'ui', 'grant ui ws-x': 'read' } },
+    };
+    expect(checkInvariants(legacy).some((e) => e.includes('INV-5'))).toBe(false);
+  });
+
+  it('exempts node↔node replication and the home share', () => {
+    const nodeToNode: Scenario = {
+      ...base,
+      actors: [actor('ui', 'client'), actor('node', 'node'), actor('node2', 'node')],
+      initial: { node: { 'sub ws-x/tree': 'node2' } },
+      steps: [
+        { ...base.steps[0], to: 'node2' },
+      ],
+    };
+    expect(checkInvariants(nodeToNode).some((e) => e.includes('INV-4'))).toBe(false);
+    const homeShare: Scenario = {
+      ...base,
+      steps: [{ ...base.steps[0], payload: { share: 'home', gladeId: 'dir' } }],
+    };
+    expect(checkInvariants(homeShare).some((e) => e.includes('INV-4'))).toBe(false);
+  });
+});

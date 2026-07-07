@@ -1,0 +1,93 @@
+[
+  {
+    "id": "c-mr6jfctj-ypfr",
+    "at": "2026-07-04T15:49:19.399Z",
+    "status": "addressed",
+    "scenarioId": "s-3ui-2node",
+    "stepIndex": 2,
+    "stepId": "C2.a",
+    "phase": "T2",
+    "focusedActor": "local2",
+    "pinnedStep": null,
+    "text": "TEST NOTE: is nearest-replica routing actually safe for values, or only for logs with full chains? Feels like values need the origin signature story first.",
+    "reply": "Values are per-origin op-log entries too — a value binding is still a log of ops with GQ-9 prev-hash chains, so replica-serving verifies identically for values and logs once op signatures land on the chains (integrity is shape-independent). The REAL residues are (1) freshness lag through replica chains (noted in s-3ui-2node B9) and (2) stage-2 capability checks at non-authority hops — now designed: GladeAuthzModel.md §4 (policy rides the share) + §6 (check() at every hop), demonstrated by s-grant/s-sec-fanout and enforced mechanically by INV-4."
+  },
+  {
+    "id": "c-mr7ie7lt-3adf",
+    "at": "2026-07-05T08:08:12.545Z",
+    "status": "addressed",
+    "scenarioId": "s-diff-service",
+    "stepIndex": 2,
+    "stepId": "G2",
+    "phase": "G2",
+    "focusedActor": null,
+    "pinnedStep": null,
+    "text": "Show the example where we have ui1 with local1 and ui2 with local2 and u11 and ui2 want the same diff - does the diff service get shared (and how if not).",
+    "reply": "Yes — via service ADVERTISEMENT: when diff#1 instantiates, it publishes a leased ServiceInstanceClaim for its canonical key into the share; local2's G1 lookup finds the live claim BEFORE falling back to ServiceDefinition matching, routes to local1, and replica-of-replicas the derived stream (same C2.a mechanics). If no claim exists — or the ServiceDefinition declares dedup: per-node — local2 spawns its own, and determinism makes the duplication CORRECT, merely wasteful (same sources, same fold, byte-identical results). Dedup is an economics policy per service (diff: recompute; build: dedup+share), not a correctness need. Trace s-svc-shared queued to draw exactly your ui1@local1 + ui2@local2 case."
+  },
+  {
+    "id": "c-mr7ihv56-34b7",
+    "at": "2026-07-05T08:11:03.018Z",
+    "status": "addressed",
+    "scenarioId": "s-idp",
+    "stepIndex": 0,
+    "stepId": "A1.b",
+    "phase": "I1",
+    "focusedActor": "local1",
+    "pinnedStep": null,
+    "text": "How does the JWT get minted?",
+    "reply": "The IdP mints it — glade never does. Standard OIDC: the SPA runs the redirect/PKCE dance with the corp IdP (interactive login + MFA happen THERE), the IdP signs an id_token, the SPA presents it at HELLO, and the entry node's trust plug verifies it against the IdP's published JWKS (iss/aud/exp/nonce checks). Which issuers may bind YOUR principal is your own replicated authn-method policy (GDL-033) — without that rule, any IdP the operator configured could mint 'you' to your own mesh."
+  },
+  {
+    "id": "c-mr7im0un-ysci",
+    "at": "2026-07-05T08:14:17.039Z",
+    "status": "addressed",
+    "scenarioId": "s-roam",
+    "stepIndex": 3,
+    "stepId": "A4",
+    "phase": "RM2",
+    "focusedActor": null,
+    "pinnedStep": null,
+    "text": "'DC fleet was ALREADY a replica because gianni placed it there' - you mean the ACL replica is in the DC \"database\" whatever that is.",
+    "reply": "Yes — with one sharpening: there IS no separate ACL database. Grants/revocations are ordinary ops inside the home/workspace share (policy rides the share, AuthzModel §4), so 'the DC holds the ACL' means 'the DC node's store — its per-(share, origin) log engine, sqlite or otherwise — holds a replica of the share whose ops ARE the policy'. One storage concept: the share. That's exactly what makes every replica a competent enforcer with no policy-distribution protocol to build."
+  },
+  {
+    "id": "c-mr7inhzb-looq",
+    "at": "2026-07-05T08:15:25.895Z",
+    "status": "addressed",
+    "scenarioId": "s-roam",
+    "stepIndex": 3,
+    "stepId": "A4",
+    "phase": "RM2",
+    "focusedActor": null,
+    "pinnedStep": null,
+    "text": "This will have implications for the \"DC\" and of course ACL schema versioning.",
+    "reply": "Pinned as AZ-11. Policy records are taut-versioned under the bootstrap-model rules (current policy validates the next; mandatory-feature negotiation; GladeBootstrapModel §Self-Provisioning), plus one hard rule specific to enforcement: an enforcer that cannot parse a policy record FAILS CLOSED — denies the affected scope, never allows. The DC implication is rollout sequencing: fleet readers upgrade before any writer mints v+1 policy records, and feature negotiation gates the writer side. Same rule protects your personal nodes lagging behind a DC fleet upgrade."
+  },
+  {
+    "id": "c-mr7jmlv2-b7hg",
+    "at": "2026-07-05T08:42:43.886Z",
+    "status": "addressed",
+    "scenarioId": "s-agent",
+    "stepIndex": 0,
+    "stepId": "S5",
+    "phase": "AG1",
+    "focusedActor": null,
+    "pinnedStep": null,
+    "text": "So, how does the mcp agent become an \"attenuated under user\" \"user\" - do they have a separate credential, or is it be the fact the connection was via an MCP server.",
+    "reply": "Separate credential, always — transport is NEVER identity (any process can open a socket; 'came via MCP' proves nothing). Enrollment ceremony (now AZ-15, and in the S5 payload): the agent mints its OWN keypair at install, presents the pubkey to the sponsor, and the sponsor's approval IS the delegation record (chain link: gianni-root → agent-key, verbs, TTL) — the add-a-device ceremony, for agents. Separate keys buy the three things connection-based identity can't: attribution (ops carry the agent's origin), independent revocation (kill the agent, not your session), and attenuation (the chain narrows). A shared local MCP daemon serving two humans carries two chains — one per sponsor."
+  },
+  {
+    "id": "c-mr7jsat3-rp74",
+    "at": "2026-07-05T08:47:09.495Z",
+    "status": "addressed",
+    "scenarioId": "s-agent",
+    "stepIndex": 0,
+    "stepId": "S5",
+    "phase": "AG1",
+    "focusedActor": null,
+    "pinnedStep": null,
+    "text": "Log lived log (terminal) connection - so gryth had the ability to re-attach to a terminal - (griplab did) which allows MCP server to take over a terminal connection - of course there's little an ACL can do if an MCP is allowed to write to a terminal but reading from one is cool - AND we could have an associated chain where the command is sent and a prompt to auth the command is requested.",
+    "reply": "Agreed on all three parts, and your prompt-to-auth idea is now a first-class mechanism (AuthzModel §3a: co-signed verbs, AZ-14). (1) term.read/term.attach are ordinary read verbs — safe to grant agents. (2) term.write is exec-equivalent (write-to-pty = shell.exec) so the taxonomy treats them as ONE danger class — no pretending a write-capable terminal grant is weaker than shell. (3) The human-in-the-loop: a delegation caveat `term.write: requires cosign(sponsor)` — the enforcement point HOLDS the agent's write, publishes a pending-approval record, your session gets the prompt ('agent wants to run X — approve?'), and your signed approval op releases it. Approval is an op, so it's attributed and audited like everything else. Generalizes to git.push on protected branches and admin actions. Re-attach inherits the session's chain — no ambient takeover."
+  }
+]

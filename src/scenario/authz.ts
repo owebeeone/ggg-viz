@@ -1,0 +1,583 @@
+// Grant-aware stage-2 traces — the executable side of GladeAuthzModel.md:
+// grants as data (policy rides the share), checks as pure folds at every
+// hop, attenuation for agents, verb granularity at the authority, and the
+// external-identity bridge. INV-4 mechanically enforces §4's closure here.
+import type { Scenario } from './types';
+import { pick } from './actors';
+
+const AZ = 'GladeAuthzModel';
+const SEC = 'SecurityModelAnalysisPrompt';
+const WD = 'GladeWorkspaceDirectory';
+
+export const S_GRANT: Scenario = {
+  id: 's-grant',
+  stage: 2,
+  title: 'Grant ceremony — access appears as data',
+  summary: 'A teammate is denied, the owner appends a CapabilityGrant, every enforcer’s fold flips as it replicates, and the retry serves from cache — no authority online.',
+
+  actors: pick('gryth1', 'guest1', 'local1', 'peer1'),
+
+  initial: {
+    gryth1: { session: 'local1 (open, owner)', view: 'ws-secret tree (live)' },
+    guest1: { device: 'cert chains to GUEST root' },
+    local1: {
+      'session gryth1': 'open (owner)',
+      'sub ws-secret/ws.tree': 'gryth1',
+      replica: 'ws-secret/ws.tree (cached, LIVE)',
+      'grant gryth1 ws-secret': 'owner (all verbs)',
+      links: 'peer1 (iroh)',
+      'sub home': 'peer1 (mesh)',
+    },
+    peer1: {
+      serving: 'ws-secret via grazel',
+      'sub ws-secret/ws.tree': 'local1',
+      'grant gryth1 ws-secret': 'owner (all verbs)',
+    },
+  },
+
+  phases: [
+    { id: 'GA', label: 'Denied first', summary: 'A known principal is not an authorized one.' },
+    { id: 'GB', label: 'The grant op', summary: 'The owner appends a signed CapabilityGrant — issuance is a write, not a service call.' },
+    { id: 'GC', label: 'Access appears as data', summary: 'Folds flip as the op replicates; the retry serves from cache.' },
+  ],
+
+  steps: [
+    {
+      state: 'A1', phase: 'GA', kind: 'message', from: 'guest1', to: 'local1', frame: 'HELLO',
+      label: 'guest session (another user root)',
+      payload: { detail: { session: 'sess-g11', principal: 'teammate (asserted)', deviceCert: 'valid — chains to GUEST root' } },
+      gate: { kind: 'security', label: 'HELLO principal seam', status: 'enforced', note: 'Authn succeeds against a DIFFERENT user root — multi-user local node. Knowing who they are grants nothing.' },
+      note: 'The node now serves two principals. Everything the guest may see arrives as grant records, never as node-level trust.',
+      docRef: `${AZ} §7 · ${SEC} §3.1`,
+      sets: { local1: { 'session guest1': 'open (guest root)' } },
+    },
+    {
+      state: 'C1', phase: 'GA', kind: 'message', from: 'guest1', to: 'local1', frame: 'SUBSCRIBE',
+      label: 'subscribe: the shared workspace',
+      payload: { share: 'ws-secret', gladeId: 'ws.tree', key: '{root:"/"}', shape: 'value' },
+      note: 'Byte-identical to any subscribe — the asker cannot and need not know its own standing.',
+      sets: { guest1: { subs: 'ws-secret/ws.tree (requested)' } },
+    },
+    {
+      state: 'F1', phase: 'GA', kind: 'internal', from: 'local1', frame: 'ROUTE',
+      label: 'stream found locally',
+      payload: { share: 'ws-secret', detail: { found: 'replica present, live upstream' } },
+      gate: { kind: 'routing', label: 'replica-attach', status: 'designed', note: 'The fan-out decision — data is one map-insert away.' },
+      note: 'Stage 1 would attach here. Stage 2 asks one more question first.',
+      docRef: 's-fanout F1',
+    },
+    {
+      state: 'S4', phase: 'GA', kind: 'internal', from: 'local1', frame: 'ROUTE',
+      label: 'check(): DENY — no grant',
+      payload: { share: 'ws-secret', detail: { principal: 'guest root', grants: 'none for ws-secret', verdict: 'DENY' } },
+      gate: { kind: 'capability', label: 'fan-out capability check', status: 'enforced', note: 'check(principal, grant-fold, resource, verb) evaluated LOCALLY against the replicated policy — no oracle, no network.' },
+      note: 'The same pure function every hop runs. Its input is a fold; its verdict is deterministic everywhere.',
+      docRef: `${AZ} §6`,
+      sets: { local1: { 'denied guest1': 'ws-secret (no grant)' } },
+    },
+    {
+      state: 'S3', phase: 'GA', kind: 'message', from: 'local1', to: 'guest1', frame: 'STATUS',
+      label: 'denied, remedy named', response: true,
+      payload: { share: 'ws-secret', detail: { result: 'denied', reason: 'no capability for ws-secret', remedy: 'ask the owner for a grant' } },
+      gate: { kind: 'security', label: 'enforcement cut', status: 'enforced', note: 'Denial is data with a remedy.' },
+      note: 'The guest’s UI shows exactly what to do next.',
+      docRef: `${AZ} §4`,
+      sets: { guest1: { subs: null, view: 'ws-secret: denied (ask owner)' } },
+    },
+    {
+      state: 'J3', phase: 'GB', kind: 'message', from: 'gryth1', to: 'local1', frame: 'APPEND',
+      label: 'owner appends the grant',
+      payload: { share: 'ws-secret', detail: { op: 'CapabilityGrant{subject: guest-root, resource: (ws-secret, ws.*), verbs: [read.subscribe]}', signedBy: 'owner chain' } },
+      note: 'Issuance is a WRITE into the workspace’s policy binding — the authority doles out grants, never per-request decisions.',
+      docRef: `${AZ} §1/§3`,
+      sets: { gryth1: { 'origin log': '+CapabilityGrant(guest)' } },
+    },
+    {
+      state: 'S1', phase: 'GB', kind: 'internal', from: 'local1', frame: 'APPEND',
+      label: 'fold flips at the first enforcer',
+      payload: { share: 'ws-secret', detail: { fold: 'grants(guest, ws-secret) → read.subscribe' } },
+      note: 'The op landed; the local check() input just changed. Nothing was pushed to any enforcer — the enforcer’s own replica changed under it.',
+      docRef: `${AZ} §4`,
+      sets: { local1: { 'grant guest1 ws-secret': 'read.subscribe', 'denied guest1': null } },
+    },
+    {
+      state: 'B9', phase: 'GB', kind: 'message', from: 'local1', to: 'peer1', frame: 'OPS',
+      label: 'policy replicates with the share',
+      payload: { share: 'ws-secret', detail: { ops: 'CapabilityGrant(guest)' } },
+      note: 'Grant records ride the workspace share itself: any node holding the bytes holds the policy for the bytes.',
+      docRef: `${AZ} §4`,
+    },
+    {
+      state: 'S1', phase: 'GB', kind: 'internal', from: 'peer1', frame: 'APPEND',
+      label: 'every enforcer’s fold flips',
+      payload: { detail: { fold: 'grants(guest, ws-secret) → read.subscribe' } },
+      note: 'Replication IS the control plane — there is no grant-distribution protocol to design or break.',
+      sets: { peer1: { 'grant guest1 ws-secret': 'read.subscribe (replicated)' } },
+    },
+    {
+      state: 'C1', phase: 'GC', kind: 'message', from: 'guest1', to: 'local1', frame: 'SUBSCRIBE',
+      label: 're-subscribe (same bytes as before)',
+      payload: { share: 'ws-secret', gladeId: 'ws.tree', key: '{root:"/"}', shape: 'value' },
+      note: 'The request did not change. The fold did.',
+      sets: { guest1: { subs: 'ws-secret/ws.tree' } },
+    },
+    {
+      state: 'S4', phase: 'GC', kind: 'internal', from: 'local1', frame: 'ROUTE',
+      label: 'check(): ALLOW',
+      payload: { share: 'ws-secret', detail: { verdict: 'ALLOW', basis: 'read.subscribe ∈ grant(guest, ws-secret)' } },
+      gate: { kind: 'capability', label: 'fan-out capability check', status: 'enforced', note: 'Same function, same seam — different fold, different verdict.' },
+      note: 'Deterministic: any replica with the same op-set reaches the same verdict.',
+      docRef: `${AZ} §6`,
+      sets: { local1: { 'sub ws-secret/ws.tree': 'gryth1, guest1' } },
+    },
+    {
+      state: 'A4', phase: 'GC', kind: 'internal', from: 'local1', frame: 'FOLD',
+      label: 'late-joiner hydration',
+      payload: { share: 'ws-secret', detail: { serve: 'cached fold + tail' } },
+      note: 'Served from the replica that was here all along.',
+    },
+    {
+      state: 'A5', phase: 'GC', kind: 'message', from: 'local1', to: 'guest1', frame: 'OPS',
+      label: 'access appears', response: true,
+      payload: { share: 'ws-secret', gladeId: 'ws.tree', shape: 'value' },
+      note: 'No authority was online for this serve. The grant op could have replicated days ago — grants are data, checks are folds.',
+      docRef: `${AZ} §4/§6`,
+      sets: { guest1: { view: 'ws-secret tree (live)' } },
+    },
+  ],
+};
+
+export const S_AGENT: Scenario = {
+  id: 's-agent',
+  stage: 2,
+  title: 'Attenuated agent — narrower than its sponsor',
+  summary: 'gianni delegates two verbs to an MCP agent. In-scope reads and gwz.status flow; shell.exec — which the SPONSOR holds — dies at the authority: attenuation is not inheritance.',
+
+  actors: pick('gryth1', 'agent1', 'local1', 'peer1'),
+
+  initial: {
+    gryth1: { session: 'local1 (open)' },
+    local1: {
+      'session gryth1': 'open',
+      'grant gryth1 ws-razel': 'read.*, gwz.*, shell.exec',
+      replica: 'ws-razel/ws.tree (cached, LIVE)',
+      'sub ws-razel/ws.tree': 'gryth1',
+      'sub home': 'peer1 (mesh)',
+      links: 'peer1 (iroh)',
+    },
+    peer1: {
+      serving: 'ws-razel via grazel',
+      'sub ws-razel/ws.tree': 'local1',
+      'grant gryth1 ws-razel': 'read.*, gwz.*, shell.exec',
+    },
+  },
+
+  phases: [
+    { id: 'AG1', label: 'Delegate', summary: 'A signed chain link: subset of verbs, TTL — narrowing only.' },
+    { id: 'AG2', label: 'In scope flows', summary: 'Reads and gwz.status work exactly like the sponsor’s.' },
+    { id: 'AG3', label: 'Out of scope dies', summary: 'shell.exec is the sponsor’s right, not the delegation’s.' },
+  ],
+
+  steps: [
+    {
+      state: 'S5', phase: 'AG1', kind: 'internal', from: 'gryth1', frame: 'APPEND',
+      label: 'mint attenuated delegation',
+      payload: { detail: { enrollment: 'agent minted its OWN keypair at install; sponsor approves the pubkey (the add-a-device ceremony, for agents)', chain: 'gianni-root → agent key', resource: '(ws-razel, ws.*)', verbs: 'read.subscribe, gwz.status', caveat: 'ttl 24h' } },
+      note: 'The agent has a separate credential — identity is NEVER "the connection came via an MCP server" (transport is not identity). Each link may only NARROW (resource, verbs, caveats) ⊆ parent — the attenuation rule. This is what JWT cannot do offline.',
+      docRef: `${AZ} §2/§3`,
+      sets: { gryth1: { delegations: 'agent1 ⊆ gianni (2 verbs, 24h)' } },
+    },
+    {
+      state: 'J3', phase: 'AG1', kind: 'message', from: 'gryth1', to: 'local1', frame: 'APPEND',
+      label: 'delegation record appended',
+      payload: { share: 'ws-razel', detail: { op: 'CapabilityGrant{subject: agent-key, parent: gianni-grant, verbs: [read.subscribe, gwz.status], ttl: 24h}' } },
+      note: 'A delegation is just a grant record with a parent hash — same fold, same replication.',
+      docRef: `${AZ} §3`,
+    },
+    {
+      state: 'S1', phase: 'AG1', kind: 'internal', from: 'local1', frame: 'APPEND',
+      label: 'fold records the chain',
+      payload: { detail: { fold: 'grants(agent, ws-razel) → 2 verbs, ⊆ gianni, ttl read-side' } },
+      note: 'TTL caveats evaluate at read time — time never enters the fold (the directory rule, unchanged).',
+      docRef: `${WD} §2 · ${AZ} §4`,
+      sets: { local1: { 'grant agent1 ws-razel': 'read.subscribe, gwz.status (⊆ gryth1, ttl 24h)' } },
+    },
+    {
+      state: 'B9', phase: 'AG1', kind: 'message', from: 'local1', to: 'peer1', frame: 'OPS',
+      label: 'chain replicates',
+      payload: { share: 'ws-razel', detail: { ops: 'CapabilityGrant(agent, ⊆ gianni)' } },
+      note: 'The authority learns the delegation the same way it learns everything: ops.',
+    },
+    {
+      state: 'S1', phase: 'AG1', kind: 'internal', from: 'peer1', frame: 'APPEND',
+      label: 'authority fold updated',
+      payload: { detail: { fold: 'grants(agent, ws-razel) → 2 verbs' } },
+      note: 'Both enforcement points now agree by construction.',
+      sets: { peer1: { 'grant agent1 ws-razel': 'read.subscribe, gwz.status (replicated)' } },
+    },
+    {
+      state: 'A1', phase: 'AG2', kind: 'message', from: 'agent1', to: 'local1', frame: 'HELLO',
+      label: 'agent session opens',
+      payload: { detail: { session: 'sess-a71', principal: 'agent1 (chain → gianni root)' } },
+      gate: { kind: 'security', label: 'HELLO principal seam', status: 'enforced', note: 'The chain verifies link-by-link to a root the node trusts. An agent is an ordinary session with a narrower principal.' },
+      note: 'Agent access is a first-class path, not an afterthought (security prompt §1).',
+      docRef: `${SEC} §1/§3.1 · ${AZ} §3`,
+      sets: { local1: { 'session agent1': 'open (⊆ gianni)' } },
+    },
+    {
+      state: 'C1', phase: 'AG2', kind: 'message', from: 'agent1', to: 'local1', frame: 'SUBSCRIBE',
+      label: 'agent reads the tree',
+      payload: { share: 'ws-razel', gladeId: 'ws.tree', key: '{root:"/"}', shape: 'value' },
+      note: 'In scope: read.subscribe is in the delegation.',
+      sets: { agent1: { subs: 'ws-razel/ws.tree' } },
+    },
+    {
+      state: 'S4', phase: 'AG2', kind: 'internal', from: 'local1', frame: 'ROUTE',
+      label: 'check(): ALLOW (delegated read)',
+      payload: { share: 'ws-razel', detail: { verdict: 'ALLOW', basis: 'read.subscribe ∈ delegation; ttl valid at read time' } },
+      gate: { kind: 'capability', label: 'fan-out capability check', status: 'enforced', note: 'Chain verification + verb membership + read-side caveats — still one pure function.' },
+      note: 'The agent is served from the cache like any granted session.',
+      docRef: `${AZ} §6`,
+      sets: { local1: { 'sub ws-razel/ws.tree': 'gryth1, agent1' } },
+    },
+    {
+      state: 'A5', phase: 'AG2', kind: 'message', from: 'local1', to: 'agent1', frame: 'OPS',
+      label: 'tree to agent', response: true,
+      payload: { share: 'ws-razel', gladeId: 'ws.tree', shape: 'value' },
+      note: 'INV-4 holds: the sender’s fold carries the agent’s grant.',
+      sets: { agent1: { view: 'ws-razel tree (live)' } },
+    },
+    {
+      state: 'D1', phase: 'AG2', kind: 'message', from: 'agent1', to: 'local1', frame: 'EXCHANGE',
+      label: 'agent: gwz.status',
+      payload: { share: 'ws-razel', gladeId: 'gwz.ops', shape: 'exchange', verb: 'gwz.status', correlationId: 'x-61' },
+      note: 'In scope: the second delegated verb.',
+      sets: { local1: { 'pending x-61': 'agent1' } },
+    },
+    {
+      state: 'D2', phase: 'AG2', kind: 'message', from: 'local1', to: 'peer1', frame: 'EXCHANGE',
+      label: 'forward to authority',
+      payload: { correlationId: 'x-61', verb: 'gwz.status' },
+      note: 'Effects always reach the claim-holder; that is where verb checks live.',
+      sets: { peer1: { 'pending x-61': 'local1' } },
+    },
+    {
+      state: 'S6', phase: 'AG2', kind: 'internal', from: 'peer1', frame: 'ROUTE',
+      label: 'verb check: ALLOW',
+      payload: { detail: { verb: 'gwz.status', verdict: 'ALLOW', basis: 'gwz.status ∈ delegation' } },
+      gate: { kind: 'capability', label: 'exchange verb check', status: 'enforced', note: 'The executor is always present at execution time — effect granularity costs nothing to distribute.' },
+      note: 'Same check() at the authority, against ITS replica of the same grant fold.',
+      docRef: `${AZ} §1/§6`,
+    },
+    {
+      state: 'D3', phase: 'AG2', kind: 'internal', from: 'peer1', frame: 'PROVIDE',
+      label: 'gwz-core executes',
+      payload: { detail: { engine: 'gwz-core', op: 'per-member status', fence: 'workspace.lock held' } },
+      note: 'Granted work is just work.',
+      sets: { peer1: { gwz: 'status executed (for agent1)' } },
+    },
+    {
+      state: 'D4', phase: 'AG2', kind: 'message', from: 'peer1', to: 'local1', frame: 'EXCHANGE-RESP',
+      label: 'response', response: true,
+      payload: { correlationId: 'x-61' },
+      note: 'Back along the correlation path.',
+      sets: { peer1: { 'pending x-61': null } },
+    },
+    {
+      state: 'D5', phase: 'AG2', kind: 'message', from: 'local1', to: 'agent1', frame: 'EXCHANGE-RESP',
+      label: 'agent gets its statuses', response: true,
+      payload: { correlationId: 'x-61' },
+      note: 'The in-scope surface behaves identically to the sponsor’s.',
+      sets: { local1: { 'pending x-61': null }, agent1: { view: 'tree + member statuses' } },
+    },
+    {
+      state: 'D1', phase: 'AG3', kind: 'message', from: 'agent1', to: 'local1', frame: 'EXCHANGE',
+      label: 'agent tries shell.exec',
+      payload: { share: 'ws-razel', gladeId: 'gwz.ops', shape: 'exchange', verb: 'shell.exec', correlationId: 'x-62', detail: { cmd: 'rm -rf … (it is an agent, after all)' } },
+      note: 'The SPONSOR holds shell.exec. The delegation does not. That difference is the entire point.',
+      sets: { local1: { 'pending x-62': 'agent1' } },
+    },
+    {
+      state: 'D2', phase: 'AG3', kind: 'message', from: 'local1', to: 'peer1', frame: 'EXCHANGE',
+      label: 'forwarded — the authority decides',
+      payload: { correlationId: 'x-62', verb: 'shell.exec' },
+      note: 'Local pre-checks MAY short-circuit; the authoritative verdict is the executor’s either way.',
+      sets: { peer1: { 'pending x-62': 'local1' } },
+    },
+    {
+      state: 'S6', phase: 'AG3', kind: 'internal', from: 'peer1', frame: 'ROUTE',
+      label: 'verb check: DENY',
+      payload: { detail: { verb: 'shell.exec', verdict: 'DENY', basis: 'shell.exec ∉ delegation (attenuation is not inheritance)' } },
+      gate: { kind: 'capability', label: 'exchange verb check', status: 'enforced', note: 'The chain is valid, the session is authentic — and the verb is simply not in the narrowed set. Deny with a reason.' },
+      note: 'Exactly the product requirement: “agent X may access A,B read-only, C with exchange rights” — and nothing else.',
+      docRef: `${AZ} §3 · ${SEC} §6.4`,
+      sets: { peer1: { 'denied x-62': 'agent1: shell.exec ∉ chain', 'pending x-62': null } },
+    },
+    {
+      state: 'S3', phase: 'AG3', kind: 'message', from: 'peer1', to: 'local1', frame: 'STATUS',
+      label: 'denial travels back', response: true,
+      payload: { correlationId: 'x-62', detail: { result: 'denied', reason: 'verb not in delegation; sponsor may run it directly' } },
+      gate: { kind: 'security', label: 'enforcement cut', status: 'enforced', note: 'Denials carry the reason and the boundary: this right exists, just not for this principal.' },
+      note: 'The correlation resolves with a refusal, not a timeout.',
+      docRef: `${AZ} §6`,
+      sets: { local1: { 'pending x-62': null } },
+    },
+    {
+      state: 'S3', phase: 'AG3', kind: 'message', from: 'local1', to: 'agent1', frame: 'STATUS',
+      label: 'agent hits its fence', response: true,
+      payload: { correlationId: 'x-62', detail: { result: 'denied' } },
+      note: 'The agent’s world is exactly as large as its chain — no more.',
+      sets: { agent1: { view: 'shell.exec: DENIED (out of delegation)' } },
+    },
+  ],
+};
+
+export const S_VERBS: Scenario = {
+  id: 's-verbs',
+  stage: 2,
+  title: 'Verb granularity — same user, different rights',
+  summary: 'On a teammate-owned workspace, gianni holds read.*, gwz.status and git.pull. Reads and granted exchanges flow; shell.exec dies at the authority — which also carries a machine-local overlay.',
+
+  actors: pick('gryth1', 'local1', 'peer3'),
+
+  initial: {
+    gryth1: { session: 'local1 (open)' },
+    local1: {
+      'session gryth1': 'open',
+      'grant gryth1 ws-prod': 'read.*, gwz.status, git.pull',
+      links: 'peer3 (iroh)',
+    },
+    peer3: {
+      serving: 'ws-prod via grazel',
+      'grant gryth1 ws-prod': 'read.*, gwz.status, git.pull',
+      overlay: 'machine policy: no remote shell.exec for anyone',
+    },
+  },
+
+  phases: [
+    { id: 'V1', label: 'Reads flow', summary: 'read.* covers subscribe; the check rides the forward.' },
+    { id: 'V2', label: 'Granted verbs flow', summary: 'gwz.status and git.pull are in the set.' },
+    { id: 'V3', label: 'Ungranted verb dies', summary: 'shell.exec: not granted — and overlaid away regardless.' },
+  ],
+
+  steps: [
+    {
+      state: 'C1', phase: 'V1', kind: 'message', from: 'gryth1', to: 'local1', frame: 'SUBSCRIBE',
+      label: 'subscribe: production tree',
+      payload: { share: 'ws-prod', gladeId: 'ws.tree', key: '{root:"/"}', shape: 'value' },
+      note: 'A workspace someone ELSE owns — gianni’s rights arrived as grant records in its policy binding.',
+      sets: { gryth1: { subs: 'ws-prod/ws.tree' } },
+    },
+    {
+      state: 'C2', phase: 'V1', kind: 'internal', from: 'local1', frame: 'ROUTE',
+      label: 'route to provider',
+      payload: { share: 'ws-prod', detail: { answer: 'peer3 (claim valid)' } },
+      gate: { kind: 'routing', label: 'ServeClaim lookup', status: 'designed', note: 'Routing is unchanged by authz — separate concerns, separate folds.' },
+      note: 'Same C2 as ever.',
+      docRef: `${WD} §4`,
+      sets: { local1: { 'route ws-prod': 'peer3' } },
+    },
+    {
+      state: 'C3', phase: 'V1', kind: 'message', from: 'local1', to: 'peer3', frame: 'SUBSCRIBE',
+      label: 'forward — check(): ALLOW',
+      payload: { share: 'ws-prod', gladeId: 'ws.tree', key: '{root:"/"}', shape: 'value' },
+      gate: { kind: 'capability', label: 'capability check', status: 'enforced', note: 'read.subscribe ⊆ read.* — wildcard verb-sets resolve in check(), not in the record.' },
+      note: 'The enforcement point that was a stub in stage 1, now live.',
+      docRef: `${AZ} §5/§6`,
+      sets: { local1: { 'sub ws-prod/ws.tree': 'gryth1' }, peer3: { 'sub ws-prod/ws.tree': 'local1' } },
+    },
+    {
+      state: 'C5', phase: 'V1', kind: 'message', from: 'peer3', to: 'local1', frame: 'OPS',
+      label: 'tree ships', response: true,
+      payload: { share: 'ws-prod', gladeId: 'ws.tree', shape: 'value' },
+      note: 'Read granted, read served.',
+      sets: { local1: { replica: 'ws-prod/ws.tree' } },
+    },
+    {
+      state: 'C6', phase: 'V1', kind: 'message', from: 'local1', to: 'gryth1', frame: 'OPS',
+      label: 'tree to UI', response: true,
+      payload: { share: 'ws-prod', gladeId: 'ws.tree', shape: 'value' },
+      note: 'INV-4: local1’s fold holds gianni’s ws-prod grant — mechanically checked.',
+      sets: { gryth1: { view: 'ws-prod tree' } },
+    },
+    {
+      state: 'D1', phase: 'V2', kind: 'message', from: 'gryth1', to: 'local1', frame: 'EXCHANGE',
+      label: 'gwz.status',
+      payload: { share: 'ws-prod', gladeId: 'gwz.ops', shape: 'exchange', verb: 'gwz.status', correlationId: 'x-71' },
+      note: 'First granted exchange verb.',
+      sets: { local1: { 'pending x-71': 'gryth1' } },
+    },
+    {
+      state: 'D2', phase: 'V2', kind: 'message', from: 'local1', to: 'peer3', frame: 'EXCHANGE',
+      label: 'forward', payload: { correlationId: 'x-71', verb: 'gwz.status' },
+      note: 'To the claim-holder, as all effects.',
+      sets: { peer3: { 'pending x-71': 'local1' } },
+    },
+    {
+      state: 'S6', phase: 'V2', kind: 'internal', from: 'peer3', frame: 'ROUTE',
+      label: 'verb check: ALLOW (status)',
+      payload: { detail: { verb: 'gwz.status', verdict: 'ALLOW' } },
+      gate: { kind: 'capability', label: 'exchange verb check', status: 'enforced', note: 'Verbs name glade units, namespaced by provider — gwz.status is one entry in an open taxonomy.' },
+      note: 'Fine granularity where it is cheap: at the executor.',
+      docRef: `${AZ} §5`,
+    },
+    {
+      state: 'D3', phase: 'V2', kind: 'internal', from: 'peer3', frame: 'PROVIDE',
+      label: 'status executes',
+      payload: { detail: { engine: 'gwz-core', op: 'per-member status' } },
+      note: 'Work.',
+      sets: { peer3: { gwz: 'status: 5 clean' } },
+    },
+    {
+      state: 'D4', phase: 'V2', kind: 'message', from: 'peer3', to: 'local1', frame: 'EXCHANGE-RESP',
+      label: 'response', response: true, payload: { correlationId: 'x-71' },
+      note: 'Round trip one.',
+      sets: { peer3: { 'pending x-71': null }, local1: { 'pending x-71': null } },
+    },
+    {
+      state: 'D1', phase: 'V2', kind: 'message', from: 'gryth1', to: 'local1', frame: 'EXCHANGE',
+      label: 'git.pull',
+      payload: { share: 'ws-prod', gladeId: 'gwz.ops', shape: 'exchange', verb: 'git.pull', correlationId: 'x-72' },
+      note: 'Second granted verb — a MUTATING one: granularity is per-verb, not read-vs-write.',
+      sets: { local1: { 'pending x-72': 'gryth1' } },
+    },
+    {
+      state: 'D2', phase: 'V2', kind: 'message', from: 'local1', to: 'peer3', frame: 'EXCHANGE',
+      label: 'forward', payload: { correlationId: 'x-72', verb: 'git.pull' },
+      note: 'Same path.',
+      sets: { peer3: { 'pending x-72': 'local1' } },
+    },
+    {
+      state: 'S6', phase: 'V2', kind: 'internal', from: 'peer3', frame: 'ROUTE',
+      label: 'verb check: ALLOW (pull)',
+      payload: { detail: { verb: 'git.pull', verdict: 'ALLOW', note: 'push is NOT in the set — pull ≠ push is exactly the granularity asked for' } },
+      gate: { kind: 'capability', label: 'exchange verb check', status: 'enforced', note: 'git.pull granted, git.push absent — verb-level asymmetry within one tool.' },
+      note: 'Pull/push split without any special casing.',
+      docRef: `${AZ} §5`,
+    },
+    {
+      state: 'D3', phase: 'V2', kind: 'internal', from: 'peer3', frame: 'PROVIDE',
+      label: 'pull executes under the lock',
+      payload: { detail: { engine: 'gwz-core', op: 'pull: 3 members fast-forward', fence: 'workspace.lock held' } },
+      note: 'A granted mutation is still fenced by the machine’s own lock.',
+      sets: { peer3: { wc: 'ws-prod updated (3 ff)', 'pending x-72': null } },
+    },
+    {
+      state: 'D4', phase: 'V2', kind: 'message', from: 'peer3', to: 'local1', frame: 'EXCHANGE-RESP',
+      label: 'pull response', response: true, payload: { correlationId: 'x-72' },
+      note: 'Round trip two.',
+      sets: { local1: { 'pending x-72': null } },
+    },
+    {
+      state: 'D1', phase: 'V3', kind: 'message', from: 'gryth1', to: 'local1', frame: 'EXCHANGE',
+      label: 'shell.exec',
+      payload: { share: 'ws-prod', gladeId: 'gwz.ops', shape: 'exchange', verb: 'shell.exec', correlationId: 'x-73' },
+      note: 'Not in the grant — and the target box would refuse it anyway.',
+      sets: { local1: { 'pending x-73': 'gryth1' } },
+    },
+    {
+      state: 'D2', phase: 'V3', kind: 'message', from: 'local1', to: 'peer3', frame: 'EXCHANGE',
+      label: 'forward', payload: { correlationId: 'x-73', verb: 'shell.exec' },
+      note: 'The authority answers.',
+      sets: { peer3: { 'pending x-73': 'local1' } },
+    },
+    {
+      state: 'S6', phase: 'V3', kind: 'internal', from: 'peer3', frame: 'ROUTE',
+      label: 'verb check: DENY (grant AND overlay)',
+      payload: { detail: { verb: 'shell.exec', verdict: 'DENY', basis: 'shell.exec ∉ grant', overlay: 'machine policy forbids remote shell regardless — overlays only narrow' } },
+      gate: { kind: 'capability', label: 'exchange verb check', status: 'enforced', note: 'Two independent refusals: the grant fold and the authority’s local overlay. Either alone suffices; neither can WIDEN access.' },
+      note: 'The owner’s machine keeps the last word over its own hardware.',
+      docRef: `${AZ} §6 (overlay)`,
+      sets: { peer3: { 'denied x-73': 'shell.exec: ∉ grant + overlay', 'pending x-73': null } },
+    },
+    {
+      state: 'S3', phase: 'V3', kind: 'message', from: 'peer3', to: 'local1', frame: 'STATUS',
+      label: 'denial back', response: true,
+      payload: { correlationId: 'x-73', detail: { result: 'denied', reason: 'verb not granted (and machine overlay forbids)' } },
+      gate: { kind: 'security', label: 'enforcement cut', status: 'enforced', note: 'Reason includes both fences — honest UX beats mystery failures.' },
+      note: 'The refusal names its grounds.',
+      docRef: `${AZ} §6`,
+      sets: { local1: { 'pending x-73': null } },
+    },
+    {
+      state: 'S3', phase: 'V3', kind: 'message', from: 'local1', to: 'gryth1', frame: 'STATUS',
+      label: 'UI shows the fence', response: true,
+      payload: { correlationId: 'x-73', detail: { result: 'denied' } },
+      note: 'Same user, three verbs, three verdicts — granularity demonstrated end to end.',
+      sets: { gryth1: { view: 'ws-prod: status ✓ pull ✓ shell ✗' } },
+    },
+  ],
+};
+
+export const S_IDP: Scenario = {
+  id: 's-idp',
+  stage: 2,
+  title: 'External identity bridge — JWT at the edge only',
+  summary: 'An OIDC id_token authenticates a corporate teammate at HELLO via the trust plug. The token binds a principal and goes no further: authn ≠ authz.',
+
+  actors: pick('guest1', 'local1'),
+
+  initial: {
+    local1: { trust: 'plug: corp OIDC + local device store' },
+    guest1: { device: 'no local cert — corp employee, IdP-backed' },
+  },
+
+  phases: [
+    { id: 'I1', label: 'Bind via IdP', summary: 'The pluggable trust backend validates the token and binds a principal.' },
+    { id: 'I2', label: 'Authn ≠ authz', summary: 'A bound principal with zero grants is still denied — see s-grant for the remedy.' },
+  ],
+
+  steps: [
+    {
+      state: 'A1', variant: 'b',
+      variantNote: 'Authn input is an external IdP token (OIDC id_token) instead of a local device cert — the pluggable-trust seam exercised.',
+      phase: 'I1', kind: 'message', from: 'guest1', to: 'local1', frame: 'HELLO',
+      label: 'session open (IdP token)',
+      payload: { detail: { session: 'sess-i42', idToken: 'OIDC id_token (iss: corp IdP, sub: teammate@corp)' } },
+      gate: { kind: 'security', label: 'HELLO principal seam', status: 'enforced', note: 'This is where a JWT legitimately appears: as AUTHN INPUT at the edge. It buys identity, never capability.' },
+      note: 'Same seam as every trace — the plug decides what proof of identity it accepts (Kerberos/AD/OIDC/local).',
+      docRef: `${AZ} §2 · ${SEC} §4 (pluggable backends)`,
+    },
+    {
+      state: 'S7', phase: 'I1', kind: 'internal', from: 'local1', frame: 'ROUTE',
+      label: 'trust plug binds the principal',
+      payload: { detail: { plug: 'corp OIDC', checks: 'issuer signature, expiry, audience', bind: 'sub → principal record (teammate@corp)' } },
+      gate: { kind: 'security', label: 'trust-plug principal bind', status: 'enforced', note: 'The token is consumed HERE. Inside glade the session carries a principal, and authorization is grant chains — the token never travels as authority.' },
+      note: 'The trust source is pluggable; the capability model is not — one interface, many backends.',
+      docRef: `${AZ} §2 · ${SEC} §6.2`,
+      sets: { local1: { 'session guest1': 'open (principal via corp OIDC)' } },
+    },
+    {
+      state: 'A2', phase: 'I1', kind: 'message', from: 'local1', to: 'guest1', frame: 'HELLO-ACK',
+      label: 'session established', response: true,
+      payload: { detail: { resume: 'fresh session' } },
+      note: 'Identity settled. Rights: none yet.',
+      sets: { guest1: { session: 'local1 (open, via IdP)' } },
+    },
+    {
+      state: 'C1', phase: 'I2', kind: 'message', from: 'guest1', to: 'local1', frame: 'SUBSCRIBE',
+      label: 'subscribe: anything at all',
+      payload: { share: 'ws-secret', gladeId: 'ws.tree', key: '{root:"/"}', shape: 'value' },
+      note: 'The IdP vouched for WHO — nobody has said WHAT yet.',
+      sets: { guest1: { subs: 'ws-secret/ws.tree (requested)' } },
+    },
+    {
+      state: 'S4', phase: 'I2', kind: 'internal', from: 'local1', frame: 'ROUTE',
+      label: 'check(): DENY — zero grants',
+      payload: { share: 'ws-secret', detail: { principal: 'teammate@corp (IdP-bound)', grants: 'none', verdict: 'DENY' } },
+      gate: { kind: 'capability', label: 'fan-out capability check', status: 'enforced', note: 'Corporate identity is not a capability. The strongest IdP in the world grants nothing here.' },
+      note: 'Authn ≠ authz, mechanically. The remedy is s-grant’s ceremony, unchanged by how the principal was bound.',
+      docRef: `${AZ} §2/§6`,
+      sets: { local1: { 'denied guest1': 'ws-secret (IdP-bound, no grant)' } },
+    },
+    {
+      state: 'S3', phase: 'I2', kind: 'message', from: 'local1', to: 'guest1', frame: 'STATUS',
+      label: 'denied — ask an owner', response: true,
+      payload: { share: 'ws-secret', detail: { result: 'denied', reason: 'no capability', remedy: 'a workspace owner must append a grant (s-grant)' } },
+      gate: { kind: 'security', label: 'enforcement cut', status: 'enforced', note: 'The two traces compose: s-idp ends where s-grant begins.' },
+      note: 'Identity backends change; the grant ceremony does not.',
+      docRef: `${AZ} §2`,
+      sets: { guest1: { view: 'denied (identity ok, no grant)' } },
+    },
+  ],
+};
