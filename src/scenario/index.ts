@@ -11,7 +11,7 @@ import { S_AGENT, S_GRANT, S_IDP, S_VERBS } from './authz';
 import { S_LOCAL_GUEST, S_ROAM, S_TENANT } from './operators';
 import { S_ADMIN } from './admin';
 import { S_MIGRATE, S_SVC_SHARED, S_SYNC } from './sync';
-import { S_STACK_CONNECT, S_STACK_LOCAL } from './stack';
+import { S_STACK_CONNECT, S_STACK_LOCAL, S_STACK_MULTI } from './stack';
 import { S_BOOT } from './boot';
 import { S_APP_REGISTER } from './register';
 import { S_ZONES } from './zones';
@@ -48,6 +48,7 @@ export const SCENARIOS: Scenario[] = [
   // stage 3 — the stack page (grip · glial · glade)
   S_STACK_LOCAL,
   S_STACK_CONNECT,
+  S_STACK_MULTI,
 ];
 
 export const SCENARIO_BY_ID: Record<string, Scenario> = Object.fromEntries(

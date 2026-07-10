@@ -134,6 +134,24 @@ export const POOL: Record<string, Actor> = {
     ],
     blurb: 'Never knows about stores, sessions, or shapes — it renders drips and writes taps.',
   },
+  'ui-comp2': {
+    id: 'ui-comp2', label: 'column · doc-2', sub: 'react component — mounts the decl on doc-2', role: 'client',
+    x: 120, y: 320, w: 180, h: 90,
+    internals: [
+      { id: 'fill', label: 'domain fill', note: 'document = doc-2 — same decl, different instance' },
+      { id: 'render', label: 'render', note: 'thin projection of its own instance’s fold' },
+    ],
+    blurb: 'A second column over the SAME BindingDecl with a different domain fill — its own instance, its own fold.',
+  },
+  'ui-comp3': {
+    id: 'ui-comp3', label: 'column · doc-1 (2nd view)', sub: 'react component — mounts the decl on doc-1 again', role: 'client',
+    x: 120, y: 440, w: 180, h: 90,
+    internals: [
+      { id: 'fill', label: 'domain fill', note: 'document = doc-1 — the SAME fill as column A' },
+      { id: 'render', label: 'render', note: 'attaches to the live instance; no new fold is built' },
+    ],
+    blurb: 'A third consumer of the same fill (doc-1): it attaches to the existing instance and bumps its refcount — no second fold.',
+  },
   tap1: {
     id: 'tap1', label: 'shared tap', sub: 'grip-core — declares via glade-decl, stays thin', role: 'client',
     x: 360, y: 200, w: 190, h: 90,

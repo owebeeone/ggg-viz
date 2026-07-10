@@ -219,3 +219,133 @@ export const S_STACK_CONNECT: Scenario = {
     },
   ],
 };
+
+// Stage 3 — declarations vs instances (GlialClientRuntime §Boundaries, clarified
+// 2026-07-10). ONE app-static BindingDecl, several live instances: each mount is
+// (decl, domain fill) with its OWN fold + refcounted lifecycle. Two columns on
+// two documents run side by side; a third consumer of one fill attaches to the
+// LIVE instance (refcount++, no new fold); unmounting one column tears down only
+// its instance — the sibling is untouched. The seam is mount/unmount, idiom-
+// agnostic: how grip selects/parameterizes an instance never crosses into glial.
+export const S_STACK_MULTI: Scenario = {
+  id: 's-stack-multi',
+  stage: 3,
+  title: 'Stack: one decl, many instances — refcounted, isolated',
+  summary: 'A single BindingDecl, two live instances on two documents (each its own fold), a third consumer attaching to an existing instance (refcount, no new fold), and an unmount that tears down only its own instance.',
+
+  actors: pick('ui-comp', 'ui-comp2', 'ui-comp3', 'tap1', 'glial-rt'),
+
+  phases: [
+    { id: 'MU1', label: 'One decl, two instances', summary: 'The decl is app-static; each mount is an instance with its own fold — two documents, side by side.' },
+    { id: 'MU2', label: 'Attach — refcount, no new fold', summary: 'A third consumer of the same fill attaches to the live instance; the assembled fold is fanned, never rebuilt.' },
+    { id: 'MU3', label: 'Unmount — isolated teardown', summary: 'Refcount to zero tears down one instance; its sibling is unaffected.' },
+  ],
+
+  steps: [
+    {
+      state: 'L1', phase: 'MU1', kind: 'message', from: 'tap1', to: 'glial-rt', frame: 'DECLARE',
+      label: 'the ONE binding declared',
+      payload: { gladeId: 'notes.column', shape: 'log', detail: { decl: 'BindingDecl{notes.column, log, domain: document}', scope: 'app-static — declared once, mounted many times' } },
+      note: 'The decl is a template, not an instance. It carries the domain ANCHOR (document); the concrete document is supplied per mount.',
+      docRef: `${GDS} (BindingDecl row) · GlialClientRuntime §Boundaries`,
+      sets: { 'glial-rt': { 'decl notes.column': 'declared (app-static)' } },
+    },
+    {
+      state: 'L8', phase: 'MU1', kind: 'internal', from: 'glial-rt', frame: 'BIND',
+      label: 'mount instance A — fill doc-1',
+      payload: { detail: { instance: '(notes.column, document=doc-1)', refcount: '1 (ui-comp)', destinations: 'own local store + own fold' } },
+      note: 'The mount fills the decl with doc-1 and creates a binding INSTANCE: refcount 1, its own store destination and fold state. Nothing about how grip picked doc-1 crosses this seam.',
+      docRef: `${GCR} §Boundaries (declarations vs instances)`,
+      sets: { 'glial-rt': { 'inst notes.column@doc-1': 'mounted · refcount 1 (ui-comp)', 'fold @doc-1': 'own state (empty)' } },
+    },
+    {
+      state: 'L3', phase: 'MU1', kind: 'message', from: 'ui-comp', to: 'tap1', frame: 'APPEND',
+      label: 'user types in column A (doc-1)',
+      payload: { gladeId: 'notes.column', detail: { fill: 'doc-1', edit: 'append: "- ship the multi trace"' } },
+      note: 'The component writes through the tap for its own fill; it never names an instance or a fold.',
+    },
+    {
+      state: 'J3', phase: 'MU1', kind: 'message', from: 'tap1', to: 'glial-rt', frame: 'APPEND',
+      label: 'conduit forwards (fill doc-1)',
+      payload: { gladeId: 'notes.column', detail: { fill: 'doc-1', op: 'patch op (origin: this session)' } },
+      note: 'The thin tap routes the write to instance A by its fill — the only thing that crosses is the decl + the fill.',
+      sets: { 'glial-rt': { 'origin log @doc-1': '+1 op' } },
+    },
+    {
+      state: 'L4', phase: 'MU1', kind: 'internal', from: 'glial-rt', frame: 'PERSIST',
+      label: 'persist + fold instance A',
+      payload: { detail: { store: 'doc-1 store: 1 op', fold: 'assembled @seq 1' } },
+      note: 'Assembly runs once per instance, inside glial. Instance A now has a live fold.',
+      docRef: `${GCR} (rule 2)`,
+      sets: { 'glial-rt': { 'fold @doc-1': 'assembled @seq 1' } },
+    },
+    {
+      state: 'L8', phase: 'MU1', kind: 'internal', from: 'glial-rt', frame: 'BIND',
+      label: 'mount instance B — fill doc-2',
+      payload: { detail: { instance: '(notes.column, document=doc-2)', refcount: '1 (ui-comp2)', destinations: 'a SEPARATE store + fold' } },
+      note: 'Same decl, same grips, different fill — a second, fully independent instance. Two instances of one declaration are live at once.',
+      docRef: `${GCR} §Boundaries (declarations vs instances)`,
+      sets: { 'glial-rt': { 'inst notes.column@doc-2': 'mounted · refcount 1 (ui-comp2)', 'fold @doc-2': 'own state (empty)' } },
+    },
+    {
+      state: 'L3', phase: 'MU1', kind: 'message', from: 'ui-comp2', to: 'tap1', frame: 'APPEND',
+      label: 'user types in column B (doc-2)',
+      payload: { gladeId: 'notes.column', detail: { fill: 'doc-2', edit: 'append: "- doc-2 is its own world"' } },
+      note: 'A different document, a different instance — the same component code.',
+    },
+    {
+      state: 'J3', phase: 'MU1', kind: 'message', from: 'tap1', to: 'glial-rt', frame: 'APPEND',
+      label: 'conduit forwards (fill doc-2)',
+      payload: { gladeId: 'notes.column', detail: { fill: 'doc-2', op: 'patch op (origin: this session)' } },
+      note: 'Routed to instance B by its fill; instance A never sees this op.',
+      sets: { 'glial-rt': { 'origin log @doc-2': '+1 op' } },
+    },
+    {
+      state: 'L4', phase: 'MU1', kind: 'internal', from: 'glial-rt', frame: 'PERSIST',
+      label: 'persist + fold instance B — independent',
+      payload: { detail: { store: 'doc-2 store: 1 op', fold: 'assembled @seq 1 (disjoint from doc-1)' } },
+      note: 'Instance B folds its OWN ops. The two folds share nothing but the decl — separate assembly state is the whole point.',
+      docRef: `${GCR} (rule 2)`,
+      sets: { 'glial-rt': { 'fold @doc-2': 'assembled @seq 1 (independent of doc-1)' } },
+    },
+    {
+      state: 'L9', phase: 'MU2', kind: 'internal', from: 'glial-rt', frame: 'BIND',
+      label: 'column A2 (doc-1 again) attaches to the live instance',
+      payload: { detail: { instance: '(notes.column, document=doc-1)', refcount: '1 → 2 (ui-comp, ui-comp3)', fold: 'REUSED — no new fold, no new store' } },
+      note: 'A third consumer mounts the SAME fill (doc-1). Glial finds the live instance and bumps its refcount — client-side interest counting (s-fanout). It does NOT build a second fold.',
+      docRef: `${GCR} §Boundaries · s-fanout (interest counting)`,
+      sets: { 'glial-rt': { 'inst notes.column@doc-1': 'mounted · refcount 2 (ui-comp, ui-comp3)' } },
+    },
+    {
+      state: 'L6', phase: 'MU2', kind: 'message', from: 'glial-rt', to: 'ui-comp3', frame: 'EVENT',
+      label: 'refresh from the EXISTING fold',
+      payload: { gladeId: 'notes.column', detail: { kind: 'refresh', value: 'instance A’s assembled body', baseSeq: '1', recompute: 'none — the live fold was fanned' } },
+      note: 'The newly attached consumer gets a refresh off instance A’s current assembly. The fold was fanned, not rebuilt — attaching is free of assembly cost.',
+      docRef: `${GCR} (event envelope · rule 3)`,
+    },
+    {
+      state: 'L10', phase: 'MU3', kind: 'internal', from: 'glial-rt', frame: 'TEARDOWN',
+      label: 'column A2 unmounts — instance A retained',
+      payload: { detail: { instance: '(notes.column, document=doc-1)', refcount: '2 → 1 (ui-comp)', retained: 'fold + store stay — a consumer remains' } },
+      note: 'Unmount drops one attachment and decrements the refcount. Instance A is still live because column A holds it.',
+      docRef: `${GCR} §Boundaries (refcounted lifecycle)`,
+      sets: { 'glial-rt': { 'inst notes.column@doc-1': 'mounted · refcount 1 (ui-comp)' } },
+    },
+    {
+      state: 'L10', phase: 'MU3', kind: 'internal', from: 'glial-rt', frame: 'TEARDOWN',
+      label: 'column B unmounts doc-2 — refcount to zero',
+      payload: { detail: { instance: '(notes.column, document=doc-2)', refcount: '1 → 0', next: 'no consumer remains — teardown' } },
+      note: 'The last consumer of instance B unmounts. Its refcount hits zero, which triggers teardown of THAT instance only.',
+      docRef: `${GCR} §Boundaries (refcounted lifecycle)`,
+      sets: { 'glial-rt': { 'inst notes.column@doc-2': 'refcount 0 — draining' } },
+    },
+    {
+      state: 'L11', phase: 'MU3', kind: 'internal', from: 'glial-rt', frame: 'TEARDOWN',
+      label: 'instance B torn down — A unaffected',
+      payload: { detail: { released: 'doc-2 fold + store destination', unaffected: 'instance A (doc-1) still mounted @ refcount 1' } },
+      note: 'Teardown is per-instance: instance B’s fold and store are released; instance A — a different fill of the same decl — keeps running. Declarations are shared; instances are isolated.',
+      docRef: `${GCR} §Boundaries (declarations vs instances)`,
+      sets: { 'glial-rt': { 'inst notes.column@doc-2': null, 'fold @doc-2': null, 'origin log @doc-2': null } },
+    },
+  ],
+};
