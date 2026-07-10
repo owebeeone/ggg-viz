@@ -68,6 +68,20 @@ describe('s-zones — commons by grant, private by key', () => {
     }
   });
 
+  it('account domain serves its OWNER by identity — no self-grant record exists (AZ-17)', () => {
+    // ruled 2026-07-10: owner-scoped carve-out. No grant key ever names an
+    // account share; ownership is the `account <share>` fold entry instead.
+    for (let i = 0; i < steps.length; i++) {
+      const fold = actorStateAt(S_ZONES, i).get('local1')!;
+      for (const k of Object.keys(fold)) {
+        if (k.startsWith('grant ')) expect(k).not.toMatch(/acct-/);
+      }
+    }
+    const fold0 = actorStateAt(S_ZONES, 0).get('local1')!;
+    expect(fold0['account acct-alice']).toBe('gryth1');
+    expect(fold0['account acct-bob']).toBe('guest1');
+  });
+
   it('account domain rides into the doc: each self sees its OWN account settings (distinct shares)', () => {
     const aliceAcct = serves.find((s) => s.payload?.share === 'acct-alice' && s.payload?.gladeId === 'app.settings');
     const bobAcct = serves.find((s) => s.payload?.share === 'acct-bob' && s.payload?.gladeId === 'app.settings');

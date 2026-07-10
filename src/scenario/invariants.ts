@@ -45,6 +45,14 @@ export function checkInvariants(scenario: Scenario): string[] {
       // session requires a matching grant in the SENDER's fold at that step —
       // GladeAuthzModel §4's closure ("policy rides the share") checked
       // mechanically. Node↔node replication is node-trust, not user grants.
+      // Ruled refinements (AZ-16/AZ-17, 2026-07-10):
+      //  · private-zone serves ride the receiver's MEMBERSHIP grant — no
+      //    zone-scoped grant ever exists; which zone you receive is routing
+      //    (keying), not policy (AZ-16; GladeZones · privacy is a key).
+      //  · account domains are OWNER-exempt: a sender fold entry
+      //    `account <share>: <session>` names the owning session, which needs
+      //    no grant record (self-lockout is unrepresentable); any OTHER
+      //    receiver of an account share still needs a grant (AZ-17).
       const share = step.payload?.share;
       const rxRole = roleOf.get(step.to!);
       if (
@@ -53,8 +61,9 @@ export function checkInvariants(scenario: Scenario): string[] {
         share !== 'home' &&
         (rxRole === 'client' || rxRole === 'service')
       ) {
+        const ownerExempt = sender[`account ${share}`] === step.to;
         const grantKey = `grant ${step.to} ${share}`;
-        if (!(grantKey in sender)) {
+        if (!ownerExempt && !(grantKey in sender)) {
           errors.push(
             `${id}: OPS serves '${share}' to '${step.to}' but '${step.from}' fold has no '${grantKey}' (INV-4)`,
           );

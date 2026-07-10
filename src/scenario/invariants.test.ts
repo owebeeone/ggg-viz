@@ -90,6 +90,25 @@ describe('INV-4 grant-aware serving', () => {
     expect(checkInvariants(legacy).some((e) => e.includes('INV-5'))).toBe(false);
   });
 
+  it('account domains: the OWNER needs no grant (owner-scoped carve-out, AZ-17)', () => {
+    const owner: Scenario = {
+      ...base,
+      initial: { node: { 'sub acct-u/settings': 'ui', 'account acct-u': 'ui' } },
+      steps: [{ ...base.steps[0], payload: { share: 'acct-u', gladeId: 'settings' } }],
+    };
+    expect(checkInvariants(owner).some((e) => e.includes('INV-4'))).toBe(false);
+  });
+
+  it('account domains: any NON-owner still needs a grant (the carve-out is owner-scoped, not blanket)', () => {
+    const support: Scenario = {
+      ...base,
+      actors: [actor('ui', 'client'), actor('support', 'client'), actor('node', 'node')],
+      initial: { node: { 'sub acct-u/settings': 'support', 'account acct-u': 'ui' } },
+      steps: [{ ...base.steps[0], to: 'support', payload: { share: 'acct-u', gladeId: 'settings' } }],
+    };
+    expect(checkInvariants(support).some((e) => e.includes('INV-4'))).toBe(true);
+  });
+
   it('exempts node↔node replication and the home share', () => {
     const nodeToNode: Scenario = {
       ...base,

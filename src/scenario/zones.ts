@@ -27,8 +27,11 @@ export const S_ZONES: Scenario = {
       'replica doc-1': 'doc.body (commons) + selections (private) — live',
       // alice owns the doc and her own account domain; bob owns his own account.
       'grant gryth1 doc-1': 'owner (all verbs)',
-      'grant gryth1 acct-alice': 'owner',
-      'grant guest1 acct-bob': 'owner',
+      // AZ-17 (ruled 2026-07-10): account domains serve their OWNER by
+      // identity — no self-grant record exists; `account <share>` names the
+      // owning session and INV-4 exempts exactly that receiver.
+      'account acct-alice': 'gryth1',
+      'account acct-bob': 'guest1',
       // alice, already in the doc, is subscribed to the commons body and her account settings.
       'sub doc-1/doc.body': 'gryth1',
       'sub acct-alice/app.settings': 'gryth1',
@@ -157,7 +160,7 @@ export const S_ZONES: Scenario = {
       state: 'A5', phase: 'ZA', kind: 'message', from: 'local1', to: 'gryth1', frame: 'OPS',
       label: 'alice’s account settings', response: true,
       payload: { share: 'acct-alice', gladeId: 'app.settings', key: '"" (yours alone)', shape: 'value', detail: { domain: 'alice’s ACCOUNT domain — a different replicated world', reads: 'yours, in EVERY document' } },
-      note: 'A session is attached to several domains at once: always its account domain, plus doc-1. app settings live in the account domain and read the same across every doc. “Universal vs document” is the DOMAIN choice, not the zone choice.',
+      note: 'A session is attached to several domains at once: always its account domain, plus doc-1. app settings live in the account domain and read the same across every doc. “Universal vs document” is the DOMAIN choice, not the zone choice. The account domain serves its OWNER by identity — no grant record exists or is needed (AZ-17); a non-owner reading it WOULD need one.',
       docRef: `${ZN} · The model (the two axes)`,
       sets: { gryth1: { view: '… + app settings (from acct-alice)' } },
     },
