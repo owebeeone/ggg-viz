@@ -131,6 +131,7 @@ const STATES: CatalogState[] = [
 
   // ---- Z: zones — domain / zone / surface (GDL-039) ----------------------
   { id: 'Z1', title: 'private-zone keyed routing', frame: 'ROUTE', kind: 'internal', desc: 'A private zone is keyed to a self (self:<user>); the subscription table matches (share, glade id, key), so a foreign self never matches — privacy needs NO grant. Contrast S4: commons is the only access-controlled join.' },
+  { id: 'Z2', title: 'keyed-commons isolation', frame: 'ROUTE', kind: 'internal', desc: 'A keyed COMMONS surface (a chat group keyed by group id on one glade id) routes by (share, glade id, key): a subscriber to one key never receives another key’s ops. Group isolation is keying — the same mechanism as private zones (Z1), but a shared commons per key. Stage 1 has no per-key grant; stage 2 gates each group join with a membership grant (AZ-16).' },
 ];
 
 export const CATALOG: Record<string, CatalogState> = Object.fromEntries(

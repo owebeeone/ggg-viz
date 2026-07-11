@@ -184,6 +184,20 @@ export const POOL: Record<string, Actor> = {
     ],
     blurb: 'The substrate leg of the stack — exists only when glial configuration mounts connectivity.',
   },
+  'chat-sup': {
+    id: 'chat-sup', label: 'glade-chat supplier', sub: 'wire-attached authority session — declares group surfaces', role: 'provider',
+    x: 660, y: 420, w: 210, h: 104,
+    internals: [
+      { id: 'session', label: 'authority session', note: 'an ordinary wire session (P00-a) — no node internals' },
+      { id: 'groups', label: 'groups config', note: 'pre-declared [{id,label}] — stage-1 scope (dynamic creation = create-a-share, F2+P2)' },
+      { id: 'decls', label: 'surface decls', note: 'chat.msgs (keyed commons log, one key per group) + chat.groups (value)' },
+      { id: 'meta', label: 'chat.groups value', note: 'serves the group list; NOT in the message hot path' },
+    ],
+    blurb:
+      'The authority-side module behind the chat surfaces (GDL-040). It declares one keyed commons ' +
+      'log (chat.msgs, group id = key) and serves the chat.groups metadata value. Stage-1 messages ' +
+      'are CLIENT appends the node folds + replicates — the supplier is out of the message hot path.',
+  },
   'svc-diff': {
     id: 'svc-diff', label: 'diff service', sub: 'ephemeral derived-binding authority', role: 'service',
     temp: true,

@@ -15,6 +15,7 @@ import { S_STACK_CONNECT, S_STACK_LOCAL, S_STACK_MULTI } from './stack';
 import { S_BOOT } from './boot';
 import { S_APP_REGISTER } from './register';
 import { S_ZONES } from './zones';
+import { S_CHAT } from './chat';
 
 export const SCENARIOS: Scenario[] = [
   // stage 1 — substrate (allow-all, seams visible)
@@ -29,6 +30,7 @@ export const SCENARIOS: Scenario[] = [
   S_TAKEOVER,
   S_OFFLINE,
   S_CREATE,
+  S_CHAT,
   // stage 2 — security enforced on the same states
   S_SEC_HELLO,
   S_SEC_FANOUT,
