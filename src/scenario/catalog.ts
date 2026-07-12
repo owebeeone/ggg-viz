@@ -126,7 +126,7 @@ const STATES: CatalogState[] = [
   { id: 'N5', title: 'RegistryApi ready', frame: 'FOLD', kind: 'internal', desc: 'The materialised fold answers whoServes/replicasOf/grantsFor/nodesOf — reads are queries-over-fold, never getConfig(); a fold-backed impl slots in with no caller changing (the seam test IS the atlas).' },
 
   // ---- P: app registration / declaration surface (GDL-037/038) -----------
-  { id: 'P1', title: 'read <app>.glade', frame: 'FOLD', kind: 'internal', desc: 'A node reads an app’s <app>.glade (e.g. grazel-app.glade) as runtime DATA — loaded, not compiled: BindingDecls + ServiceDefinitions + ACL seeds parsed. Never a compiler front-end.' },
+  { id: 'P1', title: 'read <app>.glade', frame: 'FOLD', kind: 'internal', desc: 'A node reads an app’s <app>.glade (e.g. grazel-app.glade) as runtime DATA — loaded, not compiled: BindingDecls + ServiceDefinitions + ACL seeds + WorkspaceEntries parsed. Never a compiler front-end.' },
   { id: 'P2', title: 'register declarations', frame: 'APPEND', kind: 'internal', desc: 'glade ids + shapes + key-type refs registered as ordinary runtime records under the registrant’s chain — the same records dynamic configuration writes; re-registration diffs against records (GQ-6 pinning).' },
 
   // ---- Z: zones — domain / zone / surface (GDL-039) ----------------------

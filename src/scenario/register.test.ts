@@ -24,6 +24,16 @@ describe('s-app-register — .glade loaded as data', () => {
     expect(p).toMatch(/grazel-app\.glade/);
   });
 
+  it('mirrors grazel-app.glade’s composed shape (P1.S3): 7 bindings + 1 service + 2 seeds + 1 workspace', () => {
+    const read = steps.find((s) => s.state === 'P1')!;
+    expect(JSON.stringify(read.sets)).toMatch(/7 bindings, 1 service, 2 ACL seeds, 1 workspace/);
+    // the composed supplier surfaces ride the app file itself (pre-declared).
+    const p = JSON.stringify(read.payload);
+    for (const id of ['gwz.output', 'chat.msgs', 'chat.groups']) expect(p).toContain(id);
+    const register = steps.find((s) => s.state === 'P2')!;
+    expect(JSON.stringify(register.sets)).toMatch(/\+7 BindingDecl.*\+1 ServiceDefinition.*\+1 WorkspaceEntry/);
+  });
+
   it('registers glade ids + shapes as the SAME records dynamic config writes', () => {
     const register = steps.find((s) => s.state === 'P2')!;
     expect(register.frame).toBe('APPEND');
