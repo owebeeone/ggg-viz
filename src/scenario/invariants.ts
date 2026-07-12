@@ -118,5 +118,35 @@ export function checkInvariants(scenario: Scenario): string[] {
     }
   });
 
+  // INV-6 (glade-users §1.2): after the fold, no two principal records share a
+  // fingerprint. The principal fold is keyed by FINGERPRINT (set-union dedup),
+  // so a key introduced by any invite path — in any order, on any node —
+  // converges to EXACTLY ONE principal on every view. A fold entry
+  // `principal <id>` whose value carries `fp:<hex>` is a folded principal; the
+  // check spans every actor at every step, so it catches both an intra-fold
+  // duplicate (two records, one fingerprint) and cross-view divergence (two
+  // nodes disagree on who a fingerprint is). Opt-in by shape: traces with no
+  // `principal <id>` / `fp:` entries are unaffected (all pre-users traces).
+  scenario.steps.forEach((_, i) => {
+    const state = actorStateAt(scenario, i);
+    const owner = new Map<string, string>(); // fingerprint → principal id
+    for (const [, kv] of state) {
+      for (const [k, v] of Object.entries(kv)) {
+        const m = k.match(/^principal (\S.*)$/);
+        const fp = String(v).match(/\bfp:(\w+)/);
+        if (!m || !fp) continue;
+        const id = m[1];
+        const prior = owner.get(fp[1]);
+        if (prior && prior !== id) {
+          errors.push(
+            `${scenario.id}[${i}]: fingerprint '${fp[1]}' maps to both '${prior}' and '${id}' — two principal records share a fingerprint (INV-6)`,
+          );
+        } else {
+          owner.set(fp[1], id);
+        }
+      }
+    }
+  });
+
   return errors;
 }

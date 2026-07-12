@@ -16,6 +16,8 @@ import { S_BOOT } from './boot';
 import { S_APP_REGISTER } from './register';
 import { S_ZONES } from './zones';
 import { S_CHAT } from './chat';
+import { S_INVITE, S_NAME_CLASH, S_CONVERGE_IDENTITY } from './users';
+import { S_WS_HOST, S_WS_CREATE, S_WS_CLONE } from './workspaces';
 
 export const SCENARIOS: Scenario[] = [
   // stage 1 — substrate (allow-all, seams visible)
@@ -31,6 +33,13 @@ export const SCENARIOS: Scenario[] = [
   S_OFFLINE,
   S_CREATE,
   S_CHAT,
+  // GLP-0006 spine — glade-users (identity) + glade-workspaces (hosting)
+  S_INVITE,
+  S_NAME_CLASH,
+  S_CONVERGE_IDENTITY,
+  S_WS_HOST,
+  S_WS_CREATE,
+  S_WS_CLONE,
   // stage 2 — security enforced on the same states
   S_SEC_HELLO,
   S_SEC_FANOUT,

@@ -198,6 +198,21 @@ export const POOL: Record<string, Actor> = {
       'log (chat.msgs, group id = key) and serves the chat.groups metadata value. Stage-1 messages ' +
       'are CLIENT appends the node folds + replicates — the supplier is out of the message hot path.',
   },
+  'users-sup': {
+    id: 'users-sup', label: 'glade-users supplier', sub: 'wire-attached authority — invite exchange + principal directory', role: 'provider',
+    x: 660, y: 420, w: 210, h: 104,
+    internals: [
+      { id: 'session', label: 'authority session', note: 'an ordinary wire session (P00-a) — no node internals' },
+      { id: 'invites', label: 'users.invites exchange', note: 'answers accept: token freshness + signature (structural in stage 1)' },
+      { id: 'dir', label: 'dir.principals + users.introductions', note: 'serves the principal directory + sponsorship edges (fingerprint-keyed)' },
+      { id: 'names', label: 'users.names registry', note: 'optional per-domain handle claims — first-valid-claim-wins fold' },
+    ],
+    blurb:
+      'The authority-side module behind the identity surfaces (GDL-040). It answers the users.invites ' +
+      'exchange (token validation) and serves the principal directory; PrincipalRecords are keyed by ' +
+      'FINGERPRINT (the key IS the identity). Principal/introduction records are ordinary appends any ' +
+      'authorized session makes — the supplier never holds a privileged plane.',
+  },
   'svc-diff': {
     id: 'svc-diff', label: 'diff service', sub: 'ephemeral derived-binding authority', role: 'service',
     temp: true,

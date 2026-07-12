@@ -126,3 +126,47 @@ describe('INV-4 grant-aware serving', () => {
     expect(checkInvariants(homeShare).some((e) => e.includes('INV-4'))).toBe(false);
   });
 });
+
+// INV-6 (glade-users §1.2): the principal fold is keyed by fingerprint, so
+// after the fold no two principal records may share a fingerprint — every view
+// converges to exactly one principal per fingerprint. A fold entry
+// `principal <id>` whose value carries `fp:<hex>` is a folded principal.
+describe('INV-6 fingerprint-canonical identity', () => {
+  const withFolds = (folds: Record<string, Record<string, string>>): Scenario => ({
+    id: 'ids',
+    stage: 1,
+    title: 'ids',
+    summary: '',
+    actors: [actor('n1', 'node'), actor('n2', 'node')],
+    phases: [{ id: 'p', label: 'P', summary: '' }],
+    initial: folds,
+    steps: [{ state: 'A4', phase: 'p', kind: 'internal', from: 'n1', frame: 'FOLD', label: 'fold', note: 'fold' }],
+  });
+
+  it('flags two principal records that share a fingerprint (dedup failure)', () => {
+    const bad = withFolds({ n1: { 'principal alice': 'fp:9c2e', 'principal alice-dup': 'fp:9c2e' } });
+    expect(checkInvariants(bad).some((e) => e.includes('INV-6'))).toBe(true);
+  });
+
+  it('passes when each fingerprint maps to exactly one principal', () => {
+    const ok = withFolds({ n1: { 'principal alice': 'fp:9c2e', 'principal bob': 'fp:b7c9' } });
+    expect(checkInvariants(ok)).toEqual([]);
+  });
+
+  it('flags cross-view divergence — two nodes disagree on a fingerprint', () => {
+    const diverge = withFolds({ n1: { 'principal alice': 'fp:9c2e' }, n2: { 'principal mallory': 'fp:9c2e' } });
+    expect(checkInvariants(diverge).some((e) => e.includes('INV-6'))).toBe(true);
+  });
+
+  it('two principals sharing a display NAME but distinct fingerprints are fine (the two-freds case)', () => {
+    const twoFreds = withFolds({
+      n1: { 'principal fred-1': 'fp:a1b2 · name="fred"', 'principal fred-2': 'fp:b7c9 · name="fred"' },
+    });
+    expect(checkInvariants(twoFreds)).toEqual([]);
+  });
+
+  it('is opt-in by shape: folds with no principal/fp entries are unaffected (all pre-users traces)', () => {
+    const none = withFolds({ n1: { 'sub home/dir': 'ui', 'claim ws-x': 'held — epoch 1' } });
+    expect(checkInvariants(none).some((e) => e.includes('INV-6'))).toBe(false);
+  });
+});
