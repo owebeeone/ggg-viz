@@ -182,7 +182,12 @@ export const S_SVC_SHARED: Scenario = {
       operator: 'gianni',
       'session gryth3': 'open',
       'hold svc': 'granted: gianni',
+      // The derived surface + BOTH source-closure grants: gryth3 may read the
+      // diff only because it reads ws-razel AND ws-glade (INV-7 positive vector).
+      'derived svc/ws.diff': 'sources: [ws-razel, ws-glade]',
       'grant gryth3 svc': 'read.subscribe',
+      'grant gryth3 ws-razel': 'read.subscribe',
+      'grant gryth3 ws-glade': 'read.subscribe',
       'fold home': 'ServiceInstanceClaim(diff#1@local1) — replicated',
     },
   },
@@ -246,7 +251,7 @@ export const S_SVC_SHARED: Scenario = {
       state: 'A5', phase: 'SS2', kind: 'message', from: 'local2', to: 'gryth3', frame: 'OPS',
       label: 'ui2 served', response: true,
       payload: { share: 'svc', gladeId: 'ws.diff', shape: 'value' },
-      note: 'One computation, two nodes, two consumers. INV-2/INV-4/INV-5 all hold at this hop.',
+      note: 'One computation, two nodes, two consumers. INV-2/INV-4/INV-5/INV-7 all hold at this hop — gryth3 reads the diff only because it reads BOTH source closures.',
       sets: { gryth3: { view: 'diff: +13 −3 (live, shared instance)' } },
     },
     {

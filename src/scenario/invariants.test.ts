@@ -170,3 +170,93 @@ describe('INV-6 fingerprint-canonical identity', () => {
     expect(checkInvariants(none).some((e) => e.includes('INV-6'))).toBe(false);
   });
 });
+
+// INV-7 (glade-diff §5, D3): a DERIVED surface must not launder access to its
+// sources — Readers(derived) ⊆ ⋂ Readers(source). A stage-2 serve of a derived
+// share to a client/service requires the receiver to hold a grant on EVERY
+// source closure listed in the sender's `derived <share>/<gladeId>` entry.
+// Opt-in by that key shape; matched on the specific share+gladeId being served.
+describe('INV-7 derived-surface serve closure', () => {
+  const DERIVED = 'sources: [ws-razel, ws-glade]';
+  // local2 serves the derived svc/ws.diff to a receiver over an A5 OPS hop.
+  const serve = (
+    fold: Record<string, string>,
+    opts?: { stage?: 1 | 2; rxRole?: 'client' | 'node'; share?: string; gladeId?: string },
+  ): Scenario => ({
+    id: 'derived-serve',
+    stage: opts?.stage ?? 2,
+    title: 'derived-serve',
+    summary: '',
+    actors: [actor('rx', opts?.rxRole ?? 'client'), actor('local2', 'node')],
+    phases: [{ id: 'p', label: 'P', summary: '' }],
+    initial: { local2: { 'sub svc/ws.diff': 'rx', 'grant rx svc': 'read.subscribe', ...fold } },
+    steps: [
+      {
+        state: 'A5',
+        phase: 'p',
+        kind: 'message',
+        from: 'local2',
+        to: 'rx',
+        frame: 'OPS',
+        label: 'serve diff',
+        payload: { share: opts?.share ?? 'svc', gladeId: opts?.gladeId ?? 'ws.diff' },
+        note: 'serve derived surface',
+      },
+    ],
+  });
+
+  // Positive vector: derived serve to a reader holding BOTH source closures.
+  const full = {
+    'derived svc/ws.diff': DERIVED,
+    'grant rx ws-razel': 'read.subscribe',
+    'grant rx ws-glade': 'read.subscribe',
+  };
+
+  it('passes when the receiver holds read on BOTH source closures', () => {
+    expect(checkInvariants(serve(full))).toEqual([]);
+  });
+
+  it('flags a derived serve missing the right source grant (names ws-glade)', () => {
+    const { ['grant rx ws-glade']: _drop, ...missingGlade } = full;
+    const errs = checkInvariants(serve(missingGlade));
+    expect(errs.some((e) => e.includes('INV-7'))).toBe(true);
+    expect(errs.some((e) => e.includes('INV-7') && e.includes('ws-glade'))).toBe(true);
+  });
+
+  it('flags a derived serve missing the left source grant (names ws-razel)', () => {
+    const { ['grant rx ws-razel']: _drop, ...missingRazel } = full;
+    const errs = checkInvariants(serve(missingRazel));
+    expect(errs.some((e) => e.includes('INV-7') && e.includes('ws-razel'))).toBe(true);
+  });
+
+  it('owner-exempt: an `account <source>` naming the receiver satisfies that source', () => {
+    const { ['grant rx ws-glade']: _drop, ...rest } = full;
+    const owned = { ...rest, 'account ws-glade': 'rx' };
+    expect(checkInvariants(serve(owned)).some((e) => e.includes('INV-7'))).toBe(false);
+  });
+
+  it('is opt-in by shape: a serve with no `derived …` entry never trips INV-7', () => {
+    expect(checkInvariants(serve({})).some((e) => e.includes('INV-7'))).toBe(false);
+  });
+
+  it('exempts stage 1 (allow-all), even with a derived entry and no source grants', () => {
+    const bare = { 'derived svc/ws.diff': DERIVED };
+    expect(checkInvariants(serve(bare, { stage: 1 })).some((e) => e.includes('INV-7'))).toBe(false);
+  });
+
+  it('exempts a NODE/PROVIDER receiver (node-trust, parallel to INV-4)', () => {
+    const bare = { 'derived svc/ws.diff': DERIVED };
+    expect(
+      checkInvariants(serve(bare, { rxRole: 'node' })).some((e) => e.includes('INV-7')),
+    ).toBe(false);
+  });
+
+  it('a derived entry for a DIFFERENT gladeId does not gate a serve of another surface', () => {
+    // The derived entry is svc/ws.diff, but the step serves svc/ws.other — no
+    // source-closure check applies to the non-derived surface.
+    const other = { 'derived svc/ws.diff': DERIVED, 'sub svc/ws.other': 'rx' };
+    expect(
+      checkInvariants(serve(other, { gladeId: 'ws.other' })).some((e) => e.includes('INV-7')),
+    ).toBe(false);
+  });
+});

@@ -69,6 +69,39 @@ export function checkInvariants(scenario: Scenario): string[] {
           );
         }
       }
+
+      // INV-7 (stage 2 only): DERIVED-SURFACE SERVE CLOSURE — a derived surface
+      // must not launder access to its sources. glade-diff §5 (D3): the reader
+      // set of a computed artifact is the INTERSECTION of its source reader
+      // sets, Readers(derived) ⊆ ⋂ Readers(source). When the sender serves a
+      // derived share (its fold declares `derived <share>/<gladeId>:
+      // sources: [S1, S2, …]`) to a client/service, the receiver must hold read
+      // on EVERY source closure — a `grant <to> S` (or the INV-4 owner-exempt
+      // `account S: <to>`), not merely on the derived binding. Opt-in by the
+      // `derived …` key SHAPE, matched on THIS share+gladeId — so every
+      // non-diff trace (and a serve of any non-derived share) is inert; node/
+      // provider receivers and stage 1 are exempt, exactly like INV-4.
+      const gladeId = step.payload?.gladeId;
+      if (
+        scenario.stage === 2 &&
+        share &&
+        gladeId &&
+        (rxRole === 'client' || rxRole === 'service')
+      ) {
+        const derived = sender[`derived ${share}/${gladeId}`];
+        const m = derived ? String(derived).match(/sources:\s*\[([^\]]*)\]/) : null;
+        if (m) {
+          const sources = m[1].split(',').map((s) => s.trim()).filter(Boolean);
+          for (const src of sources) {
+            const srcOwnerExempt = sender[`account ${src}`] === step.to;
+            if (!srcOwnerExempt && !(`grant ${step.to} ${src}` in sender)) {
+              errors.push(
+                `${id}: serves derived '${share}/${gladeId}' to '${step.to}' without read on source '${src}' (INV-7)`,
+              );
+            }
+          }
+        }
+      }
     }
   });
 
