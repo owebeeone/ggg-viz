@@ -34,10 +34,10 @@ export const S_APP_REGISTER: Scenario = {
     {
       state: 'P1', phase: 'RL', kind: 'internal', from: 'local1', frame: 'FOLD',
       label: 'read grazel-app.glade',
-      payload: { detail: { file: 'grazel-app.glade', contents: 'BindingDecls (4 workspace surfaces: ws.tree, ws.files, ws.diff, term.log + 3 composed supplier surfaces: gwz.output, chat.msgs, chat.groups) + ServiceDefinition + ACL seeds + WorkspaceEntry (ws-razel)', composed: 'the supplier surfaces are PRE-DECLARED (P1.S3): they exist node-side whether or not a supplier host is running — declaring is contributing records, not spawning a process', mode: 'LOADED, not compiled — runtime data, never a compiler front-end', xlang: 'ids/shapes are data; key TYPES reference taut messages (existing codegen), so TS/RS/PY agree by reading the same declarations' } },
+      payload: { detail: { file: 'grazel-app.glade', contents: 'BindingDecls (4 workspace surfaces: ws.tree, ws.files, ws.diff, term.log + 3 composed supplier surfaces: gwz.output, chat.msgs, chat.groups) + ServiceDefinition + ACL seeds + a revoke line + WorkspaceEntry (ws-razel)', composed: 'the supplier surfaces are PRE-DECLARED (P1.S3): they exist node-side whether or not a supplier host is running — declaring is contributing records, not spawning a process', mode: 'LOADED, not compiled — runtime data, never a compiler front-end', xlang: 'ids/shapes are data; key TYPES reference taut messages (existing codegen), so TS/RS/PY agree by reading the same declarations' } },
       note: 'A gryth peer node = glade node + grazel authority sessions + this file. Base glade also loads its OWN app file, glade-sys.glade — grazel is just an application; base glade stays app-agnostic and operates on records whoever wrote them.',
       docRef: `${GDS} · The <app>.glade file · GDL-037`,
-      sets: { local1: { 'app grazel': 'parsed (7 bindings, 1 service, 2 ACL seeds, 1 workspace)' } },
+      sets: { local1: { 'app grazel': 'parsed (7 bindings, 1 service, 2 ACL seeds, 1 revoke, 1 workspace)' } },
     },
     {
       state: 'P2', phase: 'RL', kind: 'internal', from: 'local1', frame: 'APPEND',
@@ -52,10 +52,10 @@ export const S_APP_REGISTER: Scenario = {
     {
       state: 'S1', phase: 'RC', kind: 'internal', from: 'local1', frame: 'APPEND',
       label: 'ACL seed → CapabilityGrant',
-      payload: { share: 'home', detail: { seed: 'ACL seeds: (grazel, read.*) + (grazel, gwz.*) for the owner principal', compiledTo: 'one CapabilityGrant{...} per seed, appended under the REGISTRANT’s chain', why: 'the file is a bootstrap SHORTCUT, not a parallel ACL system' } },
+      payload: { share: 'home', detail: { seed: 'ACL seeds: (ws-razel, read.*) + (ws-razel, gwz.*) for the owner principal — a seed names the workspace share its surfaces live on', compiledTo: 'one CapabilityGrant{...} per seed, appended under the REGISTRANT’s chain', revoke: '`revoke owner grazel` withdraws, for good, the grants of the older seeds that named the app (plan Step 4.3)', why: 'the file is a bootstrap SHORTCUT, not a parallel ACL system' } },
       note: 'The seeds become ordinary grant records — the same kind s-grant appends by hand. Nothing about them is special once written.',
       docRef: `${GDS} · The <app>.glade file (ACL seeds) · ${AZ} §3`,
-      sets: { local1: { 'grant owner grazel': 'read.*, gwz.* (from ACL seeds)', 'records': '+2 CapabilityGrant (seeds)' } },
+      sets: { local1: { 'grant owner ws-razel': 'read.*, gwz.* (from ACL seeds)', 'records': '+2 CapabilityGrant (seeds), +1 revocation (owner, grazel)' } },
     },
     {
       state: 'A4', phase: 'RC', kind: 'internal', from: 'local1', frame: 'FOLD',
